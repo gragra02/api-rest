@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Reserva de Laboratório - TechNova</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f6f9;
+            display: flex;
+            justify-content: center;
+            padding-top: 40px;
+            margin: 0;
+        }
+        .container {
+            width: 450px;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            font-size: 22px;
+            margin-top: 0;
+        }
+        .chat-box {
+            height: 360px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 12px;
+            overflow-y: auto;
+            background: #fafafa;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .msg {
+            padding: 10px 14px;
+            border-radius: 15px;
+            max-width: 80%;
+            line-height: 1.4;
+            white-space: pre-line;
+            font-size: 14px;
+        }
+        .msg.bot {
+            background-color: #e8f0fe;
+            color: #1a73e8;
+            align-self: flex-start;
+            border-bottom-left-radius: 2px;
+        }
+        .msg.user {
+            background-color: #1a73e8;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 2px;
+        }
+        .input-area {
+            display: flex;
+            gap: 8px;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        button {
+            padding: 10px 18px;
+            background-color: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover {
+            background-color: #1558b0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Assistente de Reservas</h1>
+        <div id="chat" class="chat-box"></div>
+        <div class="input-area">
+            <input type="text" id="userInput" placeholder="Digite aqui..." autofocus>
+            <button onclick="enviar()">Enviar</button>
+        </div>
+    </div>
+
+    <script>
+        const chat = document.getElementById('chat');
+        let estado = 'aguardando_nome';
+        let dadosReserva = {};
+
+        function adicionar(msg, tipo) {
+            const div = document.createElement('div');
+            div.className = `msg ${tipo}`;
+            div.textContent = msg;
+            chat.appendChild(div);
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        // Carrega matérias da API em tempo real ao iniciar
+        fetch('/api/materias/')
+            .then(r => r.json())
+            .then(materias => {
+                window.materias = materias;
+                adicionar("Olá! Sou o assistente da TechNova. Qual é o seu nome?", 'bot');
+            });
+
+        function enviar() {
+            const input = document.getElementById('userInput');
+            const texto = input.value.trim();
+            if (!texto) return;
+
+            adicionar(texto, 'user');
+            input.value = '';
+
+            if (estado === 'aguardando_nome') {
+                dadosReserva.professor = texto;
+                estado = 'escolher_materia';
+                const lista = window.materias.map(m => m.nome).join(', ');
+                adicionar(`Seja bem-vindo(a), ${texto}! Temos estas matérias: ${lista}. Qual será ministrada no laboratório?`, 'bot');
+            } 
+            else if (estado === 'escolher_materia') {
+                const materia = window.materias.find(m =>
+                    m.nome.toLowerCase().includes(texto.toLowerCase())
+                );
+                if (materia) {
+                    dadosReserva.materia = materia.nome;
+                    dadosReserva.professor_materia = materia.professor;
+                    estado = 'definir_data';
+                    adicionar(`Ótimo! Quando será a aula de ${materia.nome}? (ex: 15/10)`, 'bot');
+                } else {
+                    adicionar(`Desculpe, não encontrei "${texto}". Digite o nome completo.`, 'bot');
+                }
+            } 
+            else if (estado === 'definir_data') {
+                dadosReserva.data = texto;
+                estado = 'definir_hora';
+                adicionar('A que horas? (ex: 14:00)', 'bot');
+            } 
+            else if (estado === 'definir_hora') {
+                dadosReserva.hora = texto;
+                estado = 'confirmar';
+                adicionar(
+                    `Confirme:\n\n` +
+                    `Matéria: ${dadosReserva.materia}\n` +
+                    `Professor: ${dadosReserva.professor} (${dadosReserva.professor_materia})\n` +
+                    `Data: ${dadosReserva.data}\n` +
+                    `Hora: ${dadosReserva.hora}\n\n` +
+                    `Digite "sim" para confirmar.`,
+                    'bot'
+                );
+            } 
+            else if (estado === 'confirmar') {
+                if (texto.toLowerCase() === 'sim') {
+                    adicionar(`Reserva confirmada! O laboratório está marcado para ${dadosReserva.data} às ${dadosReserva.hora}.`, 'bot');
+                } else {
+                    adicionar('Reserva cancelada. Você pode começar novamente.', 'bot');
+                }
+                estado = 'aguardando_nome';
+            }
+        }
+
+        document.getElementById('userInput').addEventListener('keypress', e => {
+            if (e.key === 'Enter') enviar();
+        });
+    </script>
+</body>
+</html>
